@@ -1,0 +1,124 @@
+#----------------------------------------------------#
+#---------- Update dashboard for main page ----------#
+#----------------------------------------------------#
+ 
+setwd("C:/R/FTS")
+library(RMySQL)
+conn = dbConnect(MySQL(), 
+                 user='cb74929_cargo',
+                 password='selmed45', 
+                 dbname='cb74929_cargo', 
+                 host='92.53.96.170')
+max_period <- dbGetQuery(conn, 'select max(period) from cb74929_cargo.FTS')
+max_period <- as.numeric(max_period[1,1])
+rep_start  <- as.numeric(paste0(substr(max_period,1,4),'01'))
+rep_end    <- max_period
+ref_start  <- rep_start - 100
+ref_end    <- rep_end - 100
+sql_dash   <- paste0('
+select hd.high_group HIGH_GROUP, hd.high_group_descr HIGH_GROUP_DESCR, f.flow FLOW,
+sum(case when f.period between ', ref_start, ' and ', ref_end, ' then f.stoim end) REF_VAL,
+sum(case when f.period between ', rep_start, ' and ', rep_end, ' then f.stoim end) REP_VAL,
+sum(case when f.period between ', ref_start, ' and ', ref_end, ' then f.netto end) REF_NET,
+sum(case when f.period between ', rep_start, ' and ', rep_end, ' then f.netto end) REP_NET
+from cb74929_cargo.FTS f join cb74929_cargo.HIGH_GROUP h 
+on substr(f.product_nc,1,2) = h.nc_group
+join cb74929_cargo.HIGH_GROUP_DESCR hd
+on hd.high_group = h.high_group
+where
+f.period between ', ref_start, ' and ', ref_end, '
+or 
+f.period between ', rep_start, ' and ', rep_end, '
+group by hd.high_group, hd.high_group_descr, f.flow')
+dashboard <- dbGetQuery(conn = conn, statement = sql_dash)
+dbDisconnect(conn)
+detach(name = "package:RMySQL", unload=TRUE)
+ 
+library(sqldf)
+dash <- sqldf('
+select d.high_group, d.flow, 
+d.ref_val, d.rep_val, 
+case when d.rep_val > d.ref_val then 100 * (d.rep_val - d.ref_val) / d.ref_val else 100 * (d.ref_val - d.rep_val) / d.ref_val end DLT_VAL,
+case when d.rep_val > d.ref_val then "+" else "-" end SGN_VAL,
+d.ref_net, d.rep_net, 
+case when d.rep_net > d.ref_net then 100 * (d.rep_net - d.ref_net) / d.ref_net else 100 * (d.ref_net - d.rep_net) / d.ref_net end DLT_NET,
+case when d.rep_net > d.ref_net then "+" else "-" end SGN_NET
+from dashboard d')
+ 
+mon <- data.frame(MM  = c('01','02','03','04','05','06','07','08','09','10','11','12'),
+                  MMM = c('янв','фев','мар','апр','май','июн','июл','авг','сен','окт','нбр','дек'),
+     stringsAsFactors = F)
+ 
+ref_period <- data.frame(MM = substr(ref_start,5,6),
+                         YY = substr(ref_start,3,4),
+                         stringsAsFactors = F)
+ 
+merge(x = as.data.frame(ref_start), y = mon, by = "NAPR")
+ 
+ 
+ 
+ 
+dashboard <- dbGetQuery(conn, 
+"select hd.high_group, hd.high_group_descr, f.flow,
+sum(case when f.period between 201601 and 201603 then f.stoim end) REF_VAL,
+sum(case when f.period between 201701 and 201703 then f.stoim end) REP_VAL,
+sum(case when f.period between 201601 and 201603 then f.netto end) REF_NET,
+sum(case when f.period between 201701 and 201703 then f.netto end) REP_NET
+from cb74929_cargo.FTS f join cb74929_cargo.HIGH_GROUP h 
+on substr(f.product_nc,1,2) = h.nc_group
+join cb74929_cargo.HIGH_GROUP_DESCR hd
+on hd.high_group = h.high_group
+where
+f.period between 201601 and 201603
+or 
+f.period between 201701 and 201703
+group by hd.high_group, hd.high_group_descr, f.flow")
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+setwd("C:/R/FTS")
+library(readxl)
+high_groups <- read_excel(path = "HIGH_GROUPS.xlsx", col_names = F)
+colnames(high_groups) <- c("HIGH_GROUP",
+                           "HIGH_GROUP_DESCR",
+                           "HIGH_GROUP_DESCR_1",
+                           "HIGH_GROUP_DESCR_2")
+write.table(high_groups, file="HIGH_GROUPS.txt", fileEncoding ="utf8")
+high_groups_enc <- read.table(file="HIGH_GROUPS.txt",encoding="utf8")
+library(RMySQL)
+conn = dbConnect(MySQL(), 
+                 user='cb74929_cargo',
+                 password='selmed45', 
+                 dbname='cb74929_cargo', 
+                 host='92.53.96.170')
+dbWriteTable(conn, "HIGH_GROUP_DESCR", high_groups_enc, overwrite = F, append = T, row.names = F)
+dbDisconnect(conn)
+ 
+ 
+high_groups_ref <- read_excel(path = "high_groups_ref.xlsx", col_names = T)
+write.table(high_groups_ref, file="HIGH_GROUPS_REF.txt", fileEncoding ="utf8", row.names = F, col.names = F)
+high_groups_ref_enc <- data.frame(GROUP = character(),
+                                  HIGH_GROUP = character(),
+                                  stringsAsFactors = F)
+ 
+high_groups_ref_enc <- rbind(high_groups_ref_enc,
+                             read.table(file="HIGH_GROUPS_REF.txt", encoding="utf8", stringsAsFactors = F, as.is = T)
+)
+ 
+library(RMySQL)
+conn = dbConnect(MySQL(), 
+                 user='cb74929_cargo',
+                 password='selmed45', 
+                 dbname='cb74929_cargo', 
+                 host='92.53.96.170')
+dbWriteTable(conn, "HIGH_GROUP", high_groups_ref, overwrite = F, append = T, row.names = F)
+dbDisconnect(conn)

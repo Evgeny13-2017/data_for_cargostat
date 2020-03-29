@@ -1,0 +1,160 @@
+#Парсинг Евростат
+
+необходим 7-zip и батник следующего содержания:
+"%programfiles%\7-Zip\7z.exe" e c:\R\EU -oc:\R\EU -aoa
+TIMEOUT /T 10 /NOBREAK
+ 
+ 
+R-script
+ 
+# EU batch
+for (i in (201601:201612))
+{
+  print(paste0("Loading ",i))
+  month<-i
+  url.eu<-paste0("http://ec.europa.eu/eurostat/estat-navtree-portlet-prod/BulkDownloadListing?sort=1&file=comext%2F201707%2Fdata%2Fnc",month,".7z")
+  download.file(url=url.eu, destfile = paste0("C:/R/EU/nc",month,".7z"), mode = "wb")
+  my_batch <- "C:/R/EU/unzip.bat"
+  shell.exec(shQuote(paste(my_batch), type = "cmd"))
+  Sys.sleep(30)
+  ifelse(file.exists(paste0("C:/R/EU/nc",month,".dat")), paste0("OKAY, ",month," archive ready"), Sys.sleep(60))
+  ifelse(file.exists(paste0("C:/R/EU/nc",month,".dat")), "OKAY, going to read it!", "Can't find archive!!!")
+  
+  if (file.exists(paste0("C:/R/EU/nc",month,".dat"))==T)
+  {
+    print(paste0("OKAY, file ",  month, " correct"))
+    unlink(paste0("C:/R/EU/nc",month,".7z"))
+    eu<-read.table(paste0("C:/R/EU/nc",month,".dat"), header=T, quote="\"", sep=",", as.is = T,
+                   colClasses=c(rep("character",6), rep("numeric",3)))
+    save(eu, file = paste0("C:/R/EU_BULK/",month,".RData"))
+  }
+  print(paste0("Ready ",i))
+  
+}
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+еще парсонг евростата 
+# EU batch
+for (i in (201701:201705))
+{
+  print(paste0("Loading ",i))
+  month<-i
+  url.eu<-paste0("http://ec.europa.eu/eurostat/estat-navtree-portlet-prod/BulkDownloadListing?sort=1&file=comext%2F201707%2Fdata%2Fnc",month,".7z")
+  download.file(url=url.eu, destfile = paste0("C:/R/EU/nc",month,".7z"), mode = "wb")
+  my_batch <- "C:/R/EU/unzip.bat"
+  shell.exec(shQuote(paste(my_batch), type = "cmd"))
+  Sys.sleep(30)
+  ifelse(file.exists(paste0("C:/R/EU/nc",month,".dat")), paste0("OKAY, ",month," archive ready"), Sys.sleep(60))
+  ifelse(file.exists(paste0("C:/R/EU/nc",month,".dat")), "OKAY, going to read it!", "Can't find archive!!!")
+  
+  if (file.exists(paste0("C:/R/EU/nc",month,".dat"))==T)
+  {
+    print(paste0("OKAY, file ",  month, " correct"))
+    unlink(paste0("C:/R/EU/nc",month,".7z"))
+    eu<-read.table(paste0("C:/R/EU/nc",month,".dat"), header=T, quote="\"", sep=",", as.is = T,
+                   colClasses=c(rep("character",6), rep("numeric",3)))
+    
+    
+    eu$PRODUCT_NC6 <- substr(eu$PRODUCT_NC,0,6)
+    eu$PRODUCT_NC4 <- substr(eu$PRODUCT_NC,0,4)
+    eu$PRODUCT_NC2 <- substr(eu$PRODUCT_NC,0,2)
+    eu$DEC_NUM[eu$DECLARANT == "001"] <- 1
+    eu$DEC_NUM[eu$DECLARANT == "003"] <- 3
+    eu$DEC_NUM[eu$DECLARANT == "004"] <- 4
+    eu$DEC_NUM[eu$DECLARANT == "005"] <- 5
+    eu$DEC_NUM[eu$DECLARANT == "006"] <- 6
+    eu$DEC_NUM[eu$DECLARANT == "007"] <- 7
+    eu$DEC_NUM[eu$DECLARANT == "008"] <- 8
+    eu$DEC_NUM[eu$DECLARANT == "009"] <- 9
+    eu$DEC_NUM[eu$DECLARANT == "010"] <- 10
+    eu$DEC_NUM[eu$DECLARANT == "011"] <- 11
+    eu$DEC_NUM[eu$DECLARANT == "017"] <- 17
+    eu$DEC_NUM[eu$DECLARANT == "018"] <- 18
+    eu$DEC_NUM[eu$DECLARANT == "030"] <- 30
+    eu$DEC_NUM[eu$DECLARANT == "032"] <- 32
+    eu$DEC_NUM[eu$DECLARANT == "038"] <- 38
+    eu$DEC_NUM[eu$DECLARANT == "046"] <- 46
+    eu$DEC_NUM[eu$DECLARANT == "053"] <- 53
+    eu$DEC_NUM[eu$DECLARANT == "054"] <- 54
+    eu$DEC_NUM[eu$DECLARANT == "055"] <- 55
+    eu$DEC_NUM[eu$DECLARANT == "060"] <- 60
+    eu$DEC_NUM[eu$DECLARANT == "061"] <- 61
+    eu$DEC_NUM[eu$DECLARANT == "063"] <- 63
+    eu$DEC_NUM[eu$DECLARANT == "064"] <- 64
+    eu$DEC_NUM[eu$DECLARANT == "066"] <- 66
+    eu$DEC_NUM[eu$DECLARANT == "068"] <- 68
+    eu$DEC_NUM[eu$DECLARANT == "091"] <- 91
+    eu$DEC_NUM[eu$DECLARANT == "092"] <- 92
+    eu$DEC_NUM[eu$DECLARANT == "600"] <- 600
+    eu$DEC_NUM[eu$DECLARANT == "EU"] <- 1000
+    colnames(eu) <- toupper(colnames(eu))
+    eu <- data.frame(DECLARANT = eu$DECLARANT,
+                     DEC_NUM = eu$DEC_NUM,
+                     PARTNER = eu$PARTNER,
+                     PRODUCT_NC = eu$PRODUCT_NC,
+                     PRODUCT_NC6 = eu$PRODUCT_NC6,
+                     PRODUCT_NC4 = eu$PRODUCT_NC4,
+                     PRODUCT_NC2 = eu$PRODUCT_NC2,
+                     FLOW = eu$FLOW,
+                     STAT_REGIME = eu$STAT_REGIME,
+                     PERIOD = eu$PERIOD,
+                     VALUE_1000ECU = eu$VALUE_1000ECU,
+                     QUANTITY_TON = eu$QUANTITY_TON,
+                     SUP_QUANTITY = eu$SUP_QUANTITY,
+                     stringsAsFactors = F)
+    
+    save(eu, file = paste0("C:/R/EU_BULK/",month,".RData"))
+  }
+  print(paste0("Ready ",i))
+  
+}
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#Заливка Евростат Россия
+
+f<-201501
+for (f in (201601:201605)) {
+print(paste0(date()," loading ", f))
+load(file = paste0(f,".RData"))
+eu <- eu[eu$PARTNER=="0075",]
+library(RMySQL)
+conn = dbConnect(MySQL(), 
+                   user='cb74929_cargo',
+                   password='selmed45', 
+                   dbname='cb74929_cargo', 
+                   host='92.53.98.70')
+dbReadTable(conn, )
+dbWriteTable(conn = conn, "EUROSTAT_SNG", eu,  overwrite = F, append = T, row.names = F)
+dbDisconnect(conn)
+print(paste0(date()," ready ", f))
+  }
+ 
+# 0078 Азербайджан
+# 0077 Армения
+# 0073 Белоруссия
+# 0079 Казахстан
+# 0083 Киргизия
+ 
+sng <- dbReadTable(conn, "EUROSTAT_SNG")
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Формирвоание данных евростат_россия
+
+setwd("C:/R/EU_BULK")
+#f<-201501
+for (f in (201701:201705)) {
+  print(paste0(date()," loading ", f))
+  load(file = paste0(f,".RData"))
+  eu <- eu[eu$PARTNER=="0075",]
+ 
+  library(RMySQL)
+  conn = dbConnect(MySQL(), 
+                   user='cb74929_cargo',
+                   password='selmed45', 
+                   dbname='cb74929_cargo', 
+                   host='92.53.98.70')
+  dbWriteTable(conn = conn, "EUROSTAT_SNG", eu,  overwrite = F, append = T, row.names = F)
+  dbDisconnect(conn)
+  print(paste0(date()," ready ", f))
+}
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+

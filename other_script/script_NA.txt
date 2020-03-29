@@ -1,0 +1,421 @@
+#----------------------------------------------------#
+#---------- Update dashboard for main page ----------#
+#----------------------------------------------------#
+ 
+setwd("C:/R/FTS")
+library(RMySQL)
+conn = dbConnect(MySQL(), 
+                 user='cb74929_cargo',
+                 password='selmed45', 
+                 dbname='cb74929_cargo', 
+                 host='92.53.96.170')
+max_period <- dbGetQuery(conn, 'select max(period)
+                         from cb74929_cargo.FTS
+                         ')
+dbDisconnect(conn)
+max_period <- as.numeric(max_period[1,1])
+rep_start  <- as.numeric(paste0(substr(max_period,1,4),'01'))
+rep_end    <- max_period
+ref_start  <- rep_start - 100
+ref_end    <- rep_end - 100
+mon <- data.frame(MM  = c('01','02','03','04','05','06','07','08','09','10','11','12'),
+                  MMM = c('янв','фев','мар','апр','май','июн','июл','авг','сен','окт','нбр','дек'),
+     stringsAsFactors = F)
+ 
+dashboard <- dbGetQuery(conn, 
+"select hd.high_group, hd.high_group_descr, f.flow,
+sum(case when f.period between 201601 and 201603 then f.stoim end) REF_VAL,
+sum(case when f.period between 201701 and 201703 then f.stoim end) REP_VAL,
+sum(case when f.period between 201601 and 201603 then f.netto end) REF_NET,
+sum(case when f.period between 201701 and 201703 then f.netto end) REP_NET
+from cb74929_cargo.FTS f join cb74929_cargo.HIGH_GROUP h 
+on substr(f.product_nc,1,2) = h.nc_group
+join cb74929_cargo.HIGH_GROUP_DESCR hd
+on hd.high_group = h.high_group
+group by hd.high_group, hd.high_group_descr, f.flow")
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+setwd("C:/R/FTS")
+library(readxl)
+high_groups <- read_excel(path = "HIGH_GROUPS.xlsx", col_names = F)
+colnames(high_groups) <- c("HIGH_GROUP",
+                           "HIGH_GROUP_DESCR",
+                           "HIGH_GROUP_DESCR_1",
+                           "HIGH_GROUP_DESCR_2")
+write.table(high_groups, file="HIGH_GROUPS.txt", fileEncoding ="utf8")
+high_groups_enc <- read.table(file="HIGH_GROUPS.txt",encoding="utf8")
+library(RMySQL)
+conn = dbConnect(MySQL(), 
+                 user='cb74929_cargo',
+                 password='selmed45', 
+                 dbname='cb74929_cargo', 
+                 host='92.53.96.170')
+dbWriteTable(conn, "HIGH_GROUP_DESCR", high_groups_enc, overwrite = F, append = T, row.names = F)
+dbDisconnect(conn)
+ 
+ 
+high_groups_ref <- read_excel(path = "high_groups_ref.xlsx", col_names = T)
+write.table(high_groups_ref, file="HIGH_GROUPS_REF.txt", fileEncoding ="utf8", row.names = F, col.names = F)
+high_groups_ref_enc <- data.frame(GROUP = character(),
+                                  HIGH_GROUP = character(),
+                                  stringsAsFactors = F)
+ 
+high_groups_ref_enc <- rbind(high_groups_ref_enc,
+                             read.table(file="HIGH_GROUPS_REF.txt", encoding="utf8", stringsAsFactors = F, as.is = T)
+)
+ 
+library(RMySQL)
+conn = dbConnect(MySQL(), 
+                 user='cb74929_cargo',
+                 password='selmed45', 
+                 dbname='cb74929_cargo', 
+                 host='92.53.96.170')
+dbWriteTable(conn, "HIGH_GROUP", high_groups_ref, overwrite = F, append = T, row.names = F)
+dbDisconnect(conn)
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+#----------------------------------------------------#
+#---------- Upload FTS import/export data -----------#
+#----------------------------------------------------#
+ 
+setwd("C:/R/FTS")
+library(RMySQL)
+library(foreign)
+fts <- read.dbf("201703.dbf", as.is = T)
+fts$NAPR <- iconv(fts$NAPR, from="CP866", to="CP1251")
+fts$EDIZM <- iconv(fts$EDIZM, from="CP866", to="CP1251")
+fts$REGION <- iconv(fts$REGION, from="CP866", to="CP1251")
+fts$REGION_S <- iconv(fts$REGION_S, from="CP866", to="CP1251")
+dir <- data.frame(NAPR = c("ИМ","ЭК"),
+                  FLOW = c("IM","EC"),
+                  stringsAsFactors = F)
+fts <- merge(x = fts, y = dir, by = "NAPR")
+fts <- data.frame(FLOW = fts$FLOW,
+                  PERIOD = as.character(paste0(substr(fts$PERIOD,4,7),substr(fts$PERIOD,1,2))),
+                  REGION = as.character(substr(fts$REGION,1,5)),
+                  REGION_S = as.character(substr(fts$REGION_S,1,2)),
+                  PRODUCT_NC = as.character(fts$TNVED),
+                  ALFA2 = as.character(fts$STRANA),
+                  STOIM = as.numeric(fts$STOIM),
+                  NETTO = as.numeric(fts$NETTO),
+                  KOL = as.numeric(fts$KOL),
+                  stringsAsFactors = F
+                  )
+conn = dbConnect(MySQL(), 
+                 user='cb74929_cargo',
+                 password='selmed45', 
+                 dbname='cb74929_cargo', 
+                 host='92.53.96.170')
+dbWriteTable(conn, "FTS", fts, overwrite = F, append = T, row.names = F)
+dbDisconnect(conn)
+ 
+#----------------------------------------------------#
+#---------- Test queries for import/export ----------#
+#----------------------------------------------------#
+dbGetQuery(conn, "select period, count(*) from cb74929_cargo.FTS group by period")
+dbGetQuery(conn, "
+select period, sum(stoim)/sum(netto), sum(netto) from
+cb74929_cargo.FTS
+where 1=1
+and product_nc = '3919900000'
+and alfa2 = 'CN'
+and flow = 'IM'
+group by period
+           ")
+ 
+#----------------------------------------------------#
+#--------------- Uploading NSI data -----------------#
+#----------------------------------------------------#
+ 
+#--------------- Uploading TNVED data ---------------#
+library(foreign)
+library(RMySQL)
+fts_tnved <- read.dbf("TNVED.dbf", as.is = T)
+fts_tnved$KOD <- iconv(fts_tnved$KOD, from="CP866", to="CP1251")
+fts_tnved$SIMPLE_NAM <- iconv(fts_tnved$SIMPLE_NAM, from="CP866", to="CP1251")
+fts_tnved$KOD <- iconv(fts_tnved$KOD, from="CP1251", to="UTF-8")
+fts_tnved$SIMPLE_NAM <- iconv(fts_tnved$SIMPLE_NAM, from="CP1251", to="UTF-8")
+colnames(fts_tnved)<-c("PRODUCT_NC","DESCR")
+write.table(fts_tnved,file="fts_tnved.txt", fileEncoding ="utf8")
+fts_tnved_enc <- read.table(file="fts_tnved.txt",encoding="utf8")
+conn = dbConnect(MySQL(), 
+                 user='cb74929_cargo',
+                 password='selmed45', 
+                 dbname='cb74929_cargo', 
+                 host='92.53.96.170')
+dbWriteTable(conn, "FTS_TNVED", fts_tnved_enc, overwrite = T, row.names = F)
+dbDisconnect(conn)
+ 
+#--------------- Uploading region data ---------------#
+fts_region <- read.dbf("FO.dbf", as.is = T)
+fts_region$OKATO_1 <- iconv(fts_region$OKATO_1, from="CP866", to="CP1251")
+fts_region$OKATO_1_N <- iconv(fts_region$OKATO_1_N, from="CP866", to="CP1251")
+fts_region$OKATO_1 <- iconv(fts_region$OKATO_1, from="CP1251", to="UTF-8")
+fts_region$OKATO_1_N <- iconv(fts_region$OKATO_1_N, from="CP1251", to="UTF-8")
+colnames(fts_region)<-c("OKATO","OKATO_N")
+write.table(fts_region,file="fts_region.txt", fileEncoding ="utf8")
+fts_region_enc <- read.table(file="fts_region.txt",encoding="utf8")
+conn = dbConnect(MySQL(), 
+                 user='cb74929_cargo',
+                 password='selmed45', 
+                 dbname='cb74929_cargo', 
+                 host='92.53.96.170')
+dbWriteTable(conn, "FTS_REGION", fts_region_enc, overwrite = T, row.names = F)
+dbDisconnect(conn)
+ 
+#------------ Uploading subregion data ---------------#
+fts_subrf <- read.dbf("SUBRF.dbf", as.is = T)
+fts_subrf$OKATO_2 <- iconv(fts_subrf$OKATO_2, from="CP866", to="CP1251")
+fts_subrf$OKATO_2_N <- iconv(fts_subrf$OKATO_2_N, from="CP866", to="CP1251")
+fts_subrf$OKATO_2 <- iconv(fts_subrf$OKATO_2, from="CP1251", to="UTF-8")
+fts_subrf$OKATO_2_N <- iconv(fts_subrf$OKATO_2_N, from="CP1251", to="UTF-8")
+colnames(fts_subrf)<-c("OKATO","OKATO_N")
+write.table(fts_subrf,file="fts_subrf.txt", fileEncoding ="utf8")
+fts_subrf_enc <- read.table(file="fts_subrf.txt",encoding="utf8")
+conn = dbConnect(MySQL(), 
+                 user='cb74929_cargo',
+                 password='selmed45', 
+                 dbname='cb74929_cargo', 
+                 host='92.53.96.170')
+dbWriteTable(conn, "FTS_SUBRF", fts_subrf_enc, overwrite = T, row.names = F)
+dbDisconnect(conn)
+ 
+#------------ Uploading UOM data ---------------------#
+uom <- read.dbf("ED.dbf", as.is = T)
+uom$KOD <- iconv($NAME, from="CP866", to="CP1251")
+oksm$KOD <- iconv(oksm$KOD, from="CP866", to="CP1251")
+ 
+#------------ Uploading subregion data ---------------#
+oksm <- read.dbf("OKSM.dbf", as.is = T)
+oksm$NAME <- iconv(oksm$NAME, from="CP866", to="CP1251")
+oksm$KOD <- iconv(oksm$KOD, from="CP866", to="CP1251")
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#----------------------------------------------------#
+#---------- Upload FTS import/export data -----------#
+#----------------------------------------------------#
+ 
+setwd("C:/R/FTS")
+library(RMySQL)
+library(foreign)
+fts <- read.dbf("201703.dbf", as.is = T)
+fts$NAPR <- iconv(fts$NAPR, from="CP866", to="CP1251")
+fts$EDIZM <- iconv(fts$EDIZM, from="CP866", to="CP1251")
+fts$REGION <- iconv(fts$REGION, from="CP866", to="CP1251")
+fts$REGION_S <- iconv(fts$REGION_S, from="CP866", to="CP1251")
+dir <- data.frame(NAPR = c("ИМ","ЭК"),
+                  FLOW = c("IM","EC"),
+                  stringsAsFactors = F)
+fts <- merge(x = fts, y = dir, by = "NAPR")
+fts <- data.frame(FLOW = fts$FLOW,
+                  PERIOD = as.character(paste0(substr(fts$PERIOD,4,7),substr(fts$PERIOD,1,2))),
+                  REGION = as.character(substr(fts$REGION,1,5)),
+                  REGION_S = as.character(substr(fts$REGION_S,1,2)),
+                  PRODUCT_NC = as.character(fts$TNVED),
+                  ALFA2 = as.character(fts$STRANA),
+                  STOIM = as.numeric(fts$STOIM),
+                  NETTO = as.numeric(fts$NETTO),
+                  KOL = as.numeric(fts$KOL),
+                  stringsAsFactors = F
+                  )
+conn = dbConnect(MySQL(), 
+                 user='cb74929_cargo',
+                 password='selmed45', 
+                 dbname='cb74929_cargo', 
+                 host='92.53.96.170')
+dbWriteTable(conn, "FTS", fts, overwrite = F, append = T, row.names = F)
+dbDisconnect(conn)
+ 
+#----------------------------------------------------#
+#---------- Test queries for import/export ----------#
+#----------------------------------------------------#
+dbGetQuery(conn, "select period, count(*) from cb74929_cargo.FTS group by period")
+dbGetQuery(conn, "
+select period, sum(stoim)/sum(netto), sum(netto) from
+cb74929_cargo.FTS
+where 1=1
+and product_nc = '3919900000'
+and alfa2 = 'CN'
+and flow = 'IM'
+group by period
+           ")
+ 
+#----------------------------------------------------#
+#--------------- Uploading NSI data -----------------#
+#----------------------------------------------------#
+ 
+#--------------- Uploading TNVED data ---------------#
+library(foreign)
+library(RMySQL)
+fts_tnved <- read.dbf("TNVED.dbf", as.is = T)
+fts_tnved$KOD <- iconv(fts_tnved$KOD, from="CP866", to="CP1251")
+fts_tnved$SIMPLE_NAM <- iconv(fts_tnved$SIMPLE_NAM, from="CP866", to="CP1251")
+fts_tnved$KOD <- iconv(fts_tnved$KOD, from="CP1251", to="UTF-8")
+fts_tnved$SIMPLE_NAM <- iconv(fts_tnved$SIMPLE_NAM, from="CP1251", to="UTF-8")
+colnames(fts_tnved)<-c("PRODUCT_NC","DESCR")
+write.table(fts_tnved,file="fts_tnved.txt", fileEncoding ="utf8")
+fts_tnved_enc <- read.table(file="fts_tnved.txt",encoding="utf8")
+conn = dbConnect(MySQL(), 
+                 user='cb74929_cargo',
+                 password='selmed45', 
+                 dbname='cb74929_cargo', 
+                 host='92.53.96.170')
+dbWriteTable(conn, "FTS_TNVED", fts_tnved_enc, overwrite = T, row.names = F)
+dbDisconnect(conn)
+ 
+#--------------- Uploading region data ---------------#
+fts_region <- read.dbf("FO.dbf", as.is = T)
+fts_region$OKATO_1 <- iconv(fts_region$OKATO_1, from="CP866", to="CP1251")
+fts_region$OKATO_1_N <- iconv(fts_region$OKATO_1_N, from="CP866", to="CP1251")
+fts_region$OKATO_1 <- iconv(fts_region$OKATO_1, from="CP1251", to="UTF-8")
+fts_region$OKATO_1_N <- iconv(fts_region$OKATO_1_N, from="CP1251", to="UTF-8")
+colnames(fts_region)<-c("OKATO","OKATO_N")
+write.table(fts_region,file="fts_region.txt", fileEncoding ="utf8")
+fts_region_enc <- read.table(file="fts_region.txt",encoding="utf8")
+conn = dbConnect(MySQL(), 
+                 user='cb74929_cargo',
+                 password='selmed45', 
+                 dbname='cb74929_cargo', 
+                 host='92.53.96.170')
+dbWriteTable(conn, "FTS_REGION", fts_region_enc, overwrite = T, row.names = F)
+dbDisconnect(conn)
+ 
+#------------ Uploading subregion data ---------------#
+fts_subrf <- read.dbf("SUBRF.dbf", as.is = T)
+fts_subrf$OKATO_2 <- iconv(fts_subrf$OKATO_2, from="CP866", to="CP1251")
+fts_subrf$OKATO_2_N <- iconv(fts_subrf$OKATO_2_N, from="CP866", to="CP1251")
+fts_subrf$OKATO_2 <- iconv(fts_subrf$OKATO_2, from="CP1251", to="UTF-8")
+fts_subrf$OKATO_2_N <- iconv(fts_subrf$OKATO_2_N, from="CP1251", to="UTF-8")
+colnames(fts_subrf)<-c("OKATO","OKATO_N")
+write.table(fts_subrf,file="fts_subrf.txt", fileEncoding ="utf8")
+fts_subrf_enc <- read.table(file="fts_subrf.txt",encoding="utf8")
+conn = dbConnect(MySQL(), 
+                 user='cb74929_cargo',
+                 password='selmed45', 
+                 dbname='cb74929_cargo', 
+                 host='92.53.96.170')
+dbWriteTable(conn, "FTS_SUBRF", fts_subrf_enc, overwrite = T, row.names = F)
+dbDisconnect(conn)
+ 
+#------------ Uploading UOM data ---------------------#
+uom <- read.dbf("ED.dbf", as.is = T)
+uom$KOD <- iconv($NAME, from="CP866", to="CP1251")
+oksm$KOD <- iconv(oksm$KOD, from="CP866", to="CP1251")
+ 
+#------------ Uploading subregion data ---------------#
+oksm <- read.dbf("OKSM.dbf", as.is = T)
+oksm$NAME <- iconv(oksm$NAME, from="CP866", to="CP1251")
+oksm$KOD <- iconv(oksm$KOD, from="CP866", to="CP1251")
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#----------------------------------------------------#
+#------------- Upload Public Ledger data ------------#
+#----------------------------------------------------#
+ 
+library(RMySQL)
+conn = dbConnect(MySQL(), 
+                 user='cb74929_cargo',
+                 password='selmed45', 
+                 dbname='cb74929_cargo', 
+                 host='92.53.96.170')
+dbGetQuery(conn, "delete from cb74929_cargo.PL where substr(period,1,4) = '2017'")
+pl_descr <- dbGetQuery(conn, "select * from cb74929_cargo.PL_DESCR")
+dbDisconnect(conn)
+detach(name = "package:RMySQL", unload=TRUE)
+ 
+library(sqldf)
+library(readxl)
+pl <- read_excel("C:/R/PL/pl.xls")
+pl$group <- NA
+for (i in 1:nrow(pl)) 
+{
+  if (substr(pl[i,1],1,8)=="Product:") 
+  {pl[i,"group"] <- pl[i,1]} else
+  {pl[i,"group"] <- NA}
+}
+pl[1,"group"]<-"dummy"
+for (i in 1:nrow(pl)) 
+{
+  if (is.na(pl[i,"group"]) == TRUE)
+  {pl[i,"group"] <- pl[i-1,"group"]} else
+  {pl[i,"group"] <- pl[i,"group"]}
+}
+pl<-pl[is.na(pl[,2]) == FALSE,]
+pl$period <- as.numeric(substr(colnames(pl)[1],nchar(colnames(pl)[1])-3, nchar(colnames(pl)[1])))
+colnames(pl) <- c("MONTH","MAX_PRICE","MIN_PRICE","PRODUCT","YEAR")
+pl <- sqldf('select product, year, month, max_price, min_price from pl
+             where max_price not like "%price%"')
+pl$PRODUCT <- substr(pl$PRODUCT,12,150)
+pl$MAX_PRICE <- as.numeric(pl$MAX_PRICE)
+pl$MIN_PRICE <- as.numeric(pl$MIN_PRICE)
+mnth <- data.frame(MONTH = c("Jan","Feb","March","Apr","May","June",
+                             "Jul","Aug","Sep","Oct","Nov","Dec"),
+                       MM = c("01","02","03","04","05","06",
+                              "07","08","09","10","11","12"),
+                   stringsAsFactors = F)
+pl <- merge(x = pl, y = mnth, by = "MONTH")
+pl <- merge(x = pl, y = pl_descr, by = "PRODUCT")
+pl <- data.frame(PERIOD = paste0(pl$YEAR, pl$MM),
+                       PGROUP = pl$PGROUP,
+                       PRODUCT = pl$PRODUCT,
+                       MIN_PRICE = pl$MIN_PRICE,
+                       MAX_PRICE = pl$MAX_PRICE,
+                       stringsAsFactors = F)
+pl <- sqldf('select * from pl
+                  order by period, pgroup, product
+                  ')
+library(RMySQL)
+conn = dbConnect(MySQL(), 
+                 user='cb74929_cargo',
+                 password='selmed45', 
+                 dbname='cb74929_cargo', 
+                 host='92.53.96.170')
+dbWriteTable(conn, "PL", pl, overwrite = F, append = T, row.names = F)
+dbGetQuery(conn, "select substr(period,1,4) PERIOD, count(*) N
+           from cb74929_cargo.PL
+group by substr(period,1,4) 
+           ")
+dbDisconnect(conn)
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#база фтс загрузка
+setwd("C:/R/FTS")
+library(RMySQL)
+library(foreign)
+fts <- read.dbf("201701.dbf", as.is = T)
+fts$NAPR <- iconv(fts$NAPR, from="CP866", to="CP1251")
+fts$EDIZM <- iconv(fts$EDIZM, from="CP866", to="CP1251")
+fts$REGION <- iconv(fts$REGION, from="CP866", to="CP1251")
+fts$REGION_S <- iconv(fts$REGION_S, from="CP866", to="CP1251")
+dir <- data.frame(NAPR = c("ИМ","ЭК"),
+                  FLOW = c("IM","EC"),
+                  stringsAsFactors = F)
+fts <- merge(x = fts, y = dir, by = "NAPR")
+fts <- data.frame(FLOW = fts$FLOW,
+                  PERIOD = as.character(paste0(substr(fts$PERIOD,4,7),substr(fts$PERIOD,1,2))),
+                  REGION = as.character(substr(fts$REGION,1,5)),
+                  REGION_S = as.character(substr(fts$REGION_S,1,2)),
+                  PRODUCT_NC = as.character(fts$TNVED),
+                  ALFA2 = as.character(fts$STRANA),
+                  STOIM = as.numeric(fts$STOIM),
+                  NETTO = as.numeric(fts$NETTO),
+                  KOL = as.numeric(fts$KOL),
+                  stringsAsFactors = F
+                  )
+conn = dbConnect(MySQL(), 
+                 user='cb74929_cargo',
+                 password='selmed45', 
+                 dbname='cb74929_cargo', 
+                 host='92.53.96.170')
+dbWriteTable(conn, "FTS", fts, overwrite = F, append = T, row.names = F)
+dbDisconnect(conn)
+----------------------------------------------------------------------------------------------------------------------------------------------------------

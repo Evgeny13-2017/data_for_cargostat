@@ -1,0 +1,17 @@
+library(readxl)
+pl <- read_excel("C:/R/PL/pl.xls")
+pl$group <- NA
+for (i in 1:nrow(pl)) 
+{
+  if (substr(pl[i,1],1,8)=="Product:") 
+  {pl[i,"group"] <- pl[i,1]} else
+  {pl[i,"group"] <- NA}
+}
+pl[1,"group"]<-"dummy"
+for (i in 1:nrow(pl)) 
+{
+  if (is.na(pl[i,"group"]) == TRUE)
+  {pl[i,"group"] <- pl[i-1,"group"]} else
+  {pl[i,"group"] <- pl[i,"group"]}
+}
+pl<-pl[is.na(pl[,2]) == FALSE,]

@@ -1,0 +1,337 @@
+создание таблицы FTS
+CREATE TABLE FTS_GSF (
+                           FLOW VARCHAR(5) CHARACTER SET UTF8 COLLATE utf8_unicode_ci NOT NULL,
+                        FLOW_NUM INT,
+                        PERIOD varchar(6) CHARACTER SET UTF8 COLLATE utf8_unicode_ci NOT NULL,
+                        REGION varchar(5) CHARACTER SET UTF8 COLLATE utf8_unicode_ci NOT NULL,
+                        REGION_S varchar(2) CHARACTER SET UTF8 COLLATE utf8_unicode_ci NOT NULL,
+                        REGION_S_NUM INT,
+                        PRODUCT_NC VARCHAR(10) CHARACTER SET UTF8 COLLATE utf8_unicode_ci NOT NULL,
+                        ALFA2 VARCHAR(2) CHARACTER SET UTF8 COLLATE utf8_unicode_ci NOT NULL,
+                        STOIM float,
+                        NETTO float,
+                        KOL float,
+                        PRIMARY KEY(FLOW, FLOW_NUM, PERIOD, REGION, REGION_S_NUM, REGION_S, PRODUCT_NC, ALFA2)
+                    ) ENGINE = MYISAM DEFAULT CHARSET=UTF8 COLLATE=utf8_unicode_ci
+ 
+PARTITION BY LIST(REGION_S_NUM)
+   SUBPARTITION BY HASH(FLOW_NUM) SUBPARTITIONS 2
+                    (
+                    PARTITION CENTRE VALUES IN (1),
+                    PARTITION NORTHWESTERN VALUES IN (2),
+                    PARTITION SOUTHERN VALUES IN (3),
+                    PARTITION PRIVOLZHSKY VALUES IN (4),
+                    PARTITION URALSKY VALUES IN (5),
+                    PARTITION SIBERIAN VALUES IN (6),
+                    PARTITION FAR_EASTERN VALUES IN (7),
+                    PARTITION NORTH_CAUCASUS VALUES IN (8),
+                    PARTITION CRIMEAN VALUES IN (9),
+                    PARTITION UNKNOWN VALUES IN (10)
+                        
+ 
+);    
+-----------------------------------------------
+CREATE TABLE FTS_RUSSIA
+
+CREATE TABLE FTS_RUSSIA (
+                        FLOW VARCHAR(5) CHARACTER SET UTF8 COLLATE utf8_unicode_ci NOT NULL,
+                        FLOW_NUM INT,
+                        PERIOD varchar(6) CHARACTER SET UTF8 COLLATE utf8_unicode_ci NOT NULL,
+                        PRODUCT_NC VARCHAR(10) CHARACTER SET UTF8 COLLATE utf8_unicode_ci NOT NULL,
+                        ALFA2 VARCHAR(2) CHARACTER SET UTF8 COLLATE utf8_unicode_ci NOT NULL,
+                        STOIM float,
+                        NETTO float,
+                        KOL float,
+                        PRIMARY KEY(FLOW, FLOW_NUM, PERIOD, PRODUCT_NC, ALFA2),
+                        INDEX(ALFA2)
+                    ) ENGINE = MYISAM DEFAULT CHARSET=UTF8 COLLATE=utf8_unicode_ci
+ 
+PARTITION BY LIST(FLOW_NUM) (
+                    PARTITION IMPORT VALUES IN (1),
+                    PARTITION EXPORT VALUES IN (2)
+);    
+
+--------------------------------------------------------
+
+Заполнение_FTS_RUSSIA
+
+print("Loading pre_data ... ")
+library(RMySQL)
+library(prog)
+conn = dbConnect(MySQL(), 
+                 user='cb74929_cargo',
+                 password='selmed45', 
+                 dbname='cb74929_cargo', 
+                 host='92.53.98.70')
+ 
+fts <- dbReadTable(conn,"FTS")
+dbDisconnect(conn)
+detach(name = "package:RMySQL", unload=TRUE)
+library(sqldf)
+fts_russia <- sqldf('select flow, period, product_nc, alfa2, 
+sum(stoim) STOIM, sum(netto) NETTO, sum(kol) KOL
+                from fts
+                group by flow, period, product_nc, alfa2')
+ 
+fts_russia$flow_int <- 1
+fts_russia$flow_int[fts_russia$FLOW=="EX"] <- 2
+colnames(fts_russia) <- toupper(colnames(fts_russia))
+ 
+fts_russia <- data.frame(FLOW = fts_russia$FLOW,
+                  FLOW_NUM = fts_russia$FLOW_INT,
+                  PERIOD = fts_russia$PERIOD,
+                  PRODUCT_NC = fts_russia$PRODUCT_NC,
+                  ALFA2 = fts_russia$ALFA2,
+                  STOIM = fts_russia$STOIM,
+                  NETTO = fts_russia$NETTO,
+                  KOL = fts_russia$KOL,
+                  stringsAsFactors = F)
+ 
+fts_rows <- 1:nrow(fts_russia)
+fts_split <- split(fts_rows, ceiling(seq_along(fts_rows)/500000))
+library(progress)
+library(RMySQL)
+pb <- progress_bar$new(total =  length(fts_split))
+for (i in (1:length(fts_split))) {
+  pb$tick() 
+  fts_write <- fts_russia[fts_split[[i]],]
+  conn = dbConnect(MySQL(), 
+                   user='cb74929_cargo',
+                   password='selmed45', 
+                   dbname='cb74929_cargo', 
+                   host='92.53.98.70')
+  dbWriteTable(conn, "FTS_RUSSIA", fts_write, overwrite = F, append = T, row.names = F)
+  dbDisconnect(conn)
+}
+ 
+dbDisconnect(conn)
+---------------------------------------------------------------------------------------------------------------------------------
+Формирование таблицы FTS_RUSSIA
+
+print("Loading pre_data ... ")
+library(RMySQL)
+library(prog)
+conn = dbConnect(MySQL(), 
+                 user='cb74929_cargo',
+                 password='selmed45', 
+                 dbname='cb74929_cargo', 
+                 host='92.53.98.70')
+ 
+fts <- dbReadTable(conn,"FTS")
+dbDisconnect(conn)
+detach(name = "package:RMySQL", unload=TRUE)
+library(sqldf)
+fts_russia <- sqldf('select flow, period, product_nc, alfa2, 
+                    sum(stoim) STOIM, sum(netto) NETTO, sum(kol) KOL
+                    from fts
+                    group by flow, period, product_nc, alfa2')
+ 
+fts_russia$flow_int <- 1
+fts_russia$flow_int[fts_russia$FLOW=="EX"] <- 2
+colnames(fts_russia) <- toupper(colnames(fts_russia))
+ 
+fts_russia <- data.frame(FLOW = fts_russia$FLOW,
+                         FLOW_NUM = fts_russia$FLOW_INT,
+                         PERIOD = fts_russia$PERIOD,
+                         PRODUCT_NC = fts_russia$PRODUCT_NC,
+                         ALFA2 = fts_russia$ALFA2,
+                         STOIM = fts_russia$STOIM,
+                         NETTO = fts_russia$NETTO,
+                         KOL = fts_russia$KOL,
+                         stringsAsFactors = F)
+ 
+fts_rows <- 1:nrow(fts_russia)
+fts_split <- split(fts_rows, ceiling(seq_along(fts_rows)/500000))
+library(progress)
+library(RMySQL)
+pb <- progress_bar$new(total =  length(fts_split))
+for (i in (1:length(fts_split))) {
+  pb$tick() 
+  fts_write <- fts_russia[fts_split[[i]],]
+  conn = dbConnect(MySQL(), 
+                   user='cb74929_cargo',
+                   password='selmed45', 
+                   dbname='cb74929_cargo', 
+                   host='92.53.98.70')
+  dbWriteTable(conn, "FTS_RUSSIA", fts_write, overwrite = F, append = T, row.names = F)
+  dbDisconnect(conn)
+}
+ 
+dbDisconnect(conn)
+------------------------------------------------------------------------------------------------------------------------------------------------------------
+разобраться со скриптами 
+
+print("Loading pre_data ... ")
+library(RMySQL)
+conn = dbConnect(MySQL(), 
+                 user='cb74929_cargo',
+                 password='selmed45', 
+                 dbname='cb74929_cargo', 
+                 host='92.53.98.70')
+#---------------- select high_groups info --------------#
+fts <- dbReadTable(conn, "FTS")
+dbDisconnect(conn)
+detach(name = "package:RMySQL", unload=TRUE)
+library(sqldf)
+ 
+ 
+fts_fo <- sqldf('select flow, period, region_s, product_nc, alfa2, sum(stoim) STOIM, sum(netto) NETTO, sum(kol) KOL
+                from fts
+                group by flow, period, region_s, product_nc, alfa2')
+fts$flow_int <- 1
+fts$flow_int[fts$FLOW=="EX"] <- 2
+colnames(fts) <- toupper(colnames(fts))
+fts <- data.frame(FLOW = fts$FLOW,
+                  FLOW_NUM = fts$FLOW_INT,
+                  PERIOD = fts$PERIOD,
+                  REGION = fts$REGION,
+                  REGION_S = fts$REGION_S,
+                  REGION_S_NUM = as.integer(fts$REGION_S),
+                  PRODUCT_NC = fts$PRODUCT_NC,
+                  ALFA2 = fts$ALFA2,
+                  STOIM = fts$STOIM,
+                  NETTO = fts$NETTO,
+                  KOL = fts$KOL,
+                  stringsAsFactors = F)
+fts$REGION_S_NUM[is.na(fts$REGION_S_NUM)] <- 10
+ 
+fts_rows <- 1:nrow(fts)
+fts_split <- split(fts_rows, ceiling(seq_along(fts_rows)/500000))
+library(progress)
+library(RMySQL)
+pb <- progress_bar$new(total =  length(fts_split))
+for (i in (1:length(fts_split))) {
+  pb$tick() 
+  fts_write <- fts[fts_split[[i]],]
+  conn = dbConnect(MySQL(), 
+                   user='cb74929_cargo',
+                   password='selmed45', 
+                   dbname='cb74929_cargo', 
+                   host='92.53.98.70')
+  dbWriteTable(conn, "FTS_SF", fts_write, overwrite = F, append = T, row.names = F)
+  dbDisconnect(conn)
+}
+ 
+ 
+dbDisconnect(conn)
+detach(name = "package:RMySQL", unload=TRUE)
+library(sqldf)
+fts_rf <- sqldf('select flow, period, product_nc, alfa2, sum(stoim) STOIM, sum(netto) NETTO, sum(kol) KOL
+                from fts
+                group by flow, period, product_nc, alfa2')
+fts_rf$flow_int <- 1
+fts_rf$flow_int[fts_rf$FLOW=="EX"] <- 2
+colnames(fts_rf) <- toupper(colnames(fts_rf))
+fts_rf <- data.frame(FLOW = fts_rf$FLOW,
+                     FLOW_NUM = fts_rf$FLOW_INT,
+                     PERIOD = fts_rf$PERIOD,
+                     PRODUCT_NC = fts_rf$PRODUCT_NC,
+                     ALFA2 = fts_rf$ALFA2,
+                     STOIM = fts_rf$STOIM,
+                     NETTO = fts_rf$NETTO,
+                     KOL = fts_rf$KOL,
+                     stringsAsFactors = F)
+ 
+fts_rf_rows <- 1:nrow(fts_rf)
+fts_rf_split <- split(fts_rf_rows, ceiling(seq_along(fts_rf_rows)/500000))
+library(progress)
+library(RMySQL)
+pb <- progress_bar$new(total =  length(fts_rf_split))
+for (i in (1:length(fts_rf_split))) {
+  pb$tick() 
+  fts_rf_write <- fts_rf[fts_rf_split[[i]],]
+  conn = dbConnect(MySQL(), 
+                   user='cb74929_cargo',
+                   password='selmed45', 
+                   dbname='cb74929_cargo', 
+                   host='92.53.98.70')
+  dbWriteTable(conn, "FTS_RF", fts_rf_write, overwrite = F, append = T, row.names = F)
+  dbDisconnect(conn)
+}
+ 
+conn = dbConnect(MySQL(), 
+                 user='cb74929_cargo',
+                 password='selmed45', 
+                 dbname='cb74929_cargo', 
+                 host='92.53.98.70')
+dbGetQuery(conn, 'select count(*) from cb74929_cargo.FTS_SF')
+dbGetQuery(conn, 'select count(*) from cb74929_cargo.FTS_RF')
+ 
+ 
+fts_groups <- sqldf('select flow, period, region, region_s, 
+substr(product_nc,1,2) PRODUCT_NC,  alfa2, 
+sum(stoim) STOIM, sum(netto) NETTO, sum(kol) KOL
+from fts
+group by flow, period, region, region_s, substr(product_nc,1,2), alfa2')
+fts_groups$flow_int <- 1
+fts_groups$flow_int[fts_groups$FLOW=="EX"] <- 2
+colnames(fts_groups) <- toupper(colnames(fts_groups))
+fts_groups <- data.frame(FLOW = fts_groups$FLOW,
+                     FLOW_NUM = fts_groups$FLOW_INT,
+                     PERIOD = fts_groups$PERIOD,
+                     REGION = fts_groups$REGION,
+                     REGION_S = fts_groups$REGION_S,
+                     PRODUCT_NC = fts_groups$PRODUCT_NC,
+                     ALFA2 = fts_groups$ALFA2,
+                     STOIM = fts_groups$STOIM,
+                     NETTO = fts_groups$NETTO,
+                     KOL = fts_groups$KOL,
+                     stringsAsFactors = F)
+ 
+ 
+fts_groups_rows <- 1:nrow(fts_groups)
+fts_groups_split <- split(fts_groups_rows, ceiling(seq_along(fts_groups_rows)/500000))
+library(progress)
+library(RMySQL)
+ 
+pb <- progress_bar$new(total =  length(fts_groups_split))
+for (i in (1:length(fts_groups_split))) {
+  pb$tick() 
+  fts_groups_write <- fts_groups[fts_groups_split[[i]],]
+  conn = dbConnect(MySQL(), 
+                   user='cb74929_cargo',
+                   password='selmed45', 
+                   dbname='cb74929_cargo', 
+                   host='92.53.98.70')
+  dbWriteTable(conn, "FTS_GSF", fts_groups_write, overwrite = F, append = T, row.names = F)
+  dbDisconnect(conn)
+}
+ 
+countries_totals <- sqldf('select FLOW, PERIOD, REGION, REGION_S, PRODUCT_NC, 
+      sum(STOIM), sum(NETTO), sum(KOL)
+      from fts
+group by FLOW, PERIOD, REGION, REGION_S, PRODUCT_NC
+      ')
+ 
+countries_totals_groups <- sqldf('select FLOW, PERIOD, REGION, REGION_S, PRODUCT_NC, 
+      sum(STOIM), sum(NETTO), sum(KOL)
+                          from fts_groups
+                          group by FLOW, PERIOD, REGION, REGION_S, PRODUCT_NC
+                          ')
+ 
+ 
+date()
+sqldf('select region_s, sum(stoim)
+      from fts_groups
+      where flow_num = 1
+and period = "201701"
+      group by region_s')
+date()
+ 
+date()
+sqldf('select region_s, sum(stoim)
+      from fts
+      where flow = "EX"
+      group by region_s')
+date()
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
